@@ -34,11 +34,15 @@ Release 附带四类资产（校验和见各 tar 内 SHA256SUMS）：
 | `kbapp-entry-signed.hap` | 知识库 HAP（已签名可直接安装） | `bm install` |
 
 ```sh
-# 1) Python 运行时
-tar xzf python3.12.14-ohos-riscv64-v2.tar.gz -C /data/python312
-. /data/python312/env.sh
-# 2) 依赖 wheels
-pip install --no-index --find-links=/data/pkg/wheels312 -r <requirements>
+# 1) Python 运行时（tar 顶层为 data/ 前缀）
+mkdir -p /data/python312-gh && tar xzf python3.12.14-ohos-riscv64-v2.tar.gz -C /data/python312-gh
+P=/data/python312-gh/data/python312
+# 关键：先清掉系统泄漏的 python 环境变量，再设库路径
+unset PYTHONHOME PYTHONPATH && export LD_LIBRARY_PATH=$P/lib
+$P/bin/python3.12 -V          # Python 3.12.14
+# 2) pip 自举（tar 不带 pip，须设备端 ensurepip）+ 依赖 wheels（24 个，离线装）
+$P/bin/python3.12 -m ensurepip
+$P/bin/python3.12 -m pip install --no-index --find-links=<wheels目录> <包...>
 # 3) sidecar
 mkdir -p /data/agents && cp src/kb-src/*.py /data/agents/
 # 4) LLM 配置（默认走本机中继 127.0.0.1:16000，见 DEPLOY.md「LLM 配置」）
@@ -46,9 +50,12 @@ export API_KEY=sk-xxxx          # 真实 key 通过环境变量注入，源码�
 export LLM_BASE_URL=http://127.0.0.1:16000/v1
 cd /data/agents && setsid nohup python3.12 agent_server.py > server.log 2>&1 < /dev/null &
 curl -s http://127.0.0.1:8765/api/health
-# 5) kbapp HAP
-hdc install kbapp-entry-signed.hap   # 或 hapdev run kbapp 从源码构建
+# 5) kbapp HAP（Release 已附签名包，设备实测 bm install 一次通过）
+/data/hap-dev/bin/withtoken bm install -p kbapp-entry-signed.hap   # 需 LD_LIBRARY_PATH=/system/lib64/platformsdk
 ```
+
+> 2026-08-29 实测：以上 1/2/5 步在 K3 pico 从 GitHub Release 全流程走通
+> （python -V ✓、pip 离线装 click 8.5.0 ✓、kbapp 安装成功 ✓）。
 
 ## 关键契约速记（详见 DEPLOY.md）
 
